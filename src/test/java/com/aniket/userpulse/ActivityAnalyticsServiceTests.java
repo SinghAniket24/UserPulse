@@ -7,6 +7,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ActivityAnalyticsServiceTests {
@@ -69,5 +70,20 @@ class ActivityAnalyticsServiceTests {
         assertFalse(analyticsService.record(new UserActivityEvent("user-2", "LOGIN_FAILED")));
 
         assertTrue(analyticsService.record(new UserActivityEvent("user-1", "LOGIN_FAILED")));
+    }
+
+    @Test
+    void shouldThrowExceptionWhenEventIsNull() {
+        assertThrows(IllegalArgumentException.class, () -> analyticsService.record(null));
+    }
+
+    @Test
+    void shouldThrowExceptionWhenEventTypeIsNull() {
+        assertThrows(IllegalArgumentException.class, () -> analyticsService.record(new UserActivityEvent("user-1", null)));
+    }
+
+    @Test
+    void shouldThrowExceptionWhenEventTypeIsBlank() {
+        assertThrows(IllegalArgumentException.class, () -> analyticsService.record(new UserActivityEvent("user-1", "   ")));
     }
 }

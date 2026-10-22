@@ -20,6 +20,10 @@ public class ActivityAnalyticsService {
             new ConcurrentHashMap<>();
 
     public boolean record(UserActivityEvent event) {
+        if (event == null || event.eventType() == null || event.eventType().isBlank()) {
+            throw new IllegalArgumentException("Event and eventType must not be null or blank");
+        }
+
         counts.computeIfAbsent(event.eventType(), key -> new LongAdder())
                 .increment();
 
