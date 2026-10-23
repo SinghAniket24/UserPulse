@@ -20,4 +20,10 @@ public class UserActivityController {
         producer.sendEvent(event);
         return "Activity accepted for processing";
     }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public String handleIllegalArgumentException(IllegalArgumentException ex) {
+        return "Invalid activity request";
+    }
 }
