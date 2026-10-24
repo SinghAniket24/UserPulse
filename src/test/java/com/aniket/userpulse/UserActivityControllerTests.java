@@ -7,9 +7,8 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -41,9 +40,6 @@ class UserActivityControllerTests {
 
     @Test
     void blankEventType() throws Exception {
-        doThrow(new IllegalArgumentException("Event and eventType must not be null or blank"))
-                .when(producer).sendEvent(any(UserActivityEvent.class));
-
         mockMvc.perform(post("/api/activities")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
@@ -54,13 +50,12 @@ class UserActivityControllerTests {
                                 """))
                 .andExpect(status().isBadRequest())
                 .andExpect(content().string("Invalid activity request"));
+
+        verifyNoInteractions(producer);
     }
 
     @Test
     void nullEventType() throws Exception {
-        doThrow(new IllegalArgumentException("Event and eventType must not be null or blank"))
-                .when(producer).sendEvent(any(UserActivityEvent.class));
-
         mockMvc.perform(post("/api/activities")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
@@ -71,5 +66,7 @@ class UserActivityControllerTests {
                                 """))
                 .andExpect(status().isBadRequest())
                 .andExpect(content().string("Invalid activity request"));
+
+        verifyNoInteractions(producer);
     }
 }

@@ -17,6 +17,9 @@ public class UserActivityController {
     @PostMapping
     @ResponseStatus(HttpStatus.ACCEPTED)
     public String receiveActivity(@RequestBody UserActivityEvent event) {
+        if (event == null || event.eventType() == null || event.eventType().isBlank()) {
+            throw new IllegalArgumentException("Invalid activity request");
+        }
         producer.sendEvent(event);
         return "Activity accepted for processing";
     }
