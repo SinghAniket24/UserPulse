@@ -13,7 +13,13 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@WebMvcTest(UserActivityController.class)
+@WebMvcTest(
+        controllers = UserActivityController.class,
+        properties = {
+                "spring.kafka.listener.auto-startup=false",
+                "spring.kafka.admin.auto-create=false"
+        }
+)
 class UserActivityControllerTests {
 
     @Autowired

@@ -49,7 +49,8 @@ import static org.awaitility.Awaitility.await;
 @SpringBootTest
 @EmbeddedKafka(
         partitions = 3,
-        topics = { "user-activity", "user-activity.DLT" }
+        topics = { "user-activity", "user-activity.DLT" },
+        bootstrapServersProperty = "spring.kafka.bootstrap-servers"
 )
 @TestPropertySource(properties = {
         "userpulse.kafka.retry.backoff-ms=100",
@@ -104,11 +105,8 @@ class KafkaErrorHandlingIntegrationTests {
     private Consumer<String, byte[]> dltConsumer;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    private static String originalBootstrapServers;
-
     @BeforeAll
     void setUpAll() {
-        originalBootstrapServers = System.getProperty("spring.kafka.bootstrap-servers");
         for (MessageListenerContainer container : registry.getListenerContainers()) {
             ContainerTestUtils.waitForAssignment(container, embeddedKafkaBroker.getPartitionsPerTopic());
         }
@@ -137,11 +135,6 @@ class KafkaErrorHandlingIntegrationTests {
         }
         if (dltConsumer != null) {
             dltConsumer.close(Duration.ofSeconds(5));
-        }
-        if (originalBootstrapServers != null) {
-            System.setProperty("spring.kafka.bootstrap-servers", originalBootstrapServers);
-        } else {
-            System.clearProperty("spring.kafka.bootstrap-servers");
         }
     }
 

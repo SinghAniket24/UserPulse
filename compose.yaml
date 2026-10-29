@@ -18,3 +18,23 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
       KAFKA_NUM_PARTITIONS: 3
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: userpulse-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-userpulse}
+      POSTGRES_USER: ${POSTGRES_USER:-userpulse}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-userpulse} -d ${POSTGRES_DB:-userpulse}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
