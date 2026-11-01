@@ -13,16 +13,24 @@ public class ActivityAnalyticsService {
 
     private static final int FAILED_LOGIN_THRESHOLD = 3;
 
+    private final ActivityEventRepository repository;
+
     private final ConcurrentHashMap<String, LongAdder> counts =
             new ConcurrentHashMap<>();
 
     private final ConcurrentHashMap<String, AtomicInteger> failedLoginAttempts =
             new ConcurrentHashMap<>();
 
+    public ActivityAnalyticsService(ActivityEventRepository repository) {
+        this.repository = repository;
+    }
+
     public boolean record(UserActivityEvent event) {
         if (event == null || event.eventType() == null || event.eventType().isBlank()) {
             throw new IllegalArgumentException("Event and eventType must not be null or blank");
         }
+
+        repository.save(new ActivityEventEntity(event.userId(), event.eventType()));
 
         counts.computeIfAbsent(event.eventType(), key -> new LongAdder())
                 .increment();

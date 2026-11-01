@@ -75,4 +75,35 @@ class UserActivityControllerTests {
 
         verifyNoInteractions(producer);
     }
+
+    @Test
+    void missingUserId() throws Exception {
+        mockMvc.perform(post("/api/activities")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                    "eventType": "LOGIN_SUCCESS"
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().string("Invalid activity request"));
+
+        verifyNoInteractions(producer);
+    }
+
+    @Test
+    void blankUserId() throws Exception {
+        mockMvc.perform(post("/api/activities")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                    "userId": "   ",
+                                    "eventType": "LOGIN_SUCCESS"
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().string("Invalid activity request"));
+
+        verifyNoInteractions(producer);
+    }
 }

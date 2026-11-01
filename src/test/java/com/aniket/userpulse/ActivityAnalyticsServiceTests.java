@@ -2,6 +2,7 @@ package com.aniket.userpulse;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 import java.util.Map;
 
@@ -9,14 +10,20 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 class ActivityAnalyticsServiceTests {
 
+    private ActivityEventRepository repository;
     private ActivityAnalyticsService analyticsService;
 
     @BeforeEach
     void setUp() {
-        analyticsService = new ActivityAnalyticsService();
+        repository = mock(ActivityEventRepository.class);
+        analyticsService = new ActivityAnalyticsService(repository);
     }
 
     @Test
@@ -75,15 +82,32 @@ class ActivityAnalyticsServiceTests {
     @Test
     void shouldThrowExceptionWhenEventIsNull() {
         assertThrows(IllegalArgumentException.class, () -> analyticsService.record(null));
+        verifyNoInteractions(repository);
     }
 
     @Test
     void shouldThrowExceptionWhenEventTypeIsNull() {
         assertThrows(IllegalArgumentException.class, () -> analyticsService.record(new UserActivityEvent("user-1", null)));
+        verifyNoInteractions(repository);
     }
 
     @Test
     void shouldThrowExceptionWhenEventTypeIsBlank() {
         assertThrows(IllegalArgumentException.class, () -> analyticsService.record(new UserActivityEvent("user-1", "   ")));
+        verifyNoInteractions(repository);
+    }
+
+    @Test
+    void shouldSaveValidEventToRepositoryExactlyOnce() {
+        UserActivityEvent event = new UserActivityEvent("user-1", "LOGIN_SUCCESS");
+
+        analyticsService.record(event);
+
+        ArgumentCaptor<ActivityEventEntity> captor = ArgumentCaptor.forClass(ActivityEventEntity.class);
+        verify(repository, times(1)).save(captor.capture());
+
+        ActivityEventEntity savedEntity = captor.getValue();
+        assertEquals("user-1", savedEntity.getUserId());
+        assertEquals("LOGIN_SUCCESS", savedEntity.getEventType());
     }
 }

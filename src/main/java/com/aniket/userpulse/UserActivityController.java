@@ -1,4 +1,3 @@
-
 package com.aniket.userpulse;
 
 import org.springframework.http.HttpStatus;
@@ -17,7 +16,9 @@ public class UserActivityController {
     @PostMapping
     @ResponseStatus(HttpStatus.ACCEPTED)
     public String receiveActivity(@RequestBody UserActivityEvent event) {
-        if (event == null || event.eventType() == null || event.eventType().isBlank()) {
+        if (event == null
+                || event.userId() == null || event.userId().isBlank()
+                || event.eventType() == null || event.eventType().isBlank()) {
             throw new IllegalArgumentException("Invalid activity request");
         }
         producer.sendEvent(event);
