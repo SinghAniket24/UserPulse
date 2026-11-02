@@ -2,10 +2,11 @@ package com.aniket.userpulse;
 
 import org.springframework.stereotype.Service;
 
+import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.LongAdder;
 import java.util.stream.Collectors;
 
 @Service
@@ -14,9 +15,6 @@ public class ActivityAnalyticsService {
     private static final int FAILED_LOGIN_THRESHOLD = 3;
 
     private final ActivityEventRepository repository;
-
-    private final ConcurrentHashMap<String, LongAdder> counts =
-            new ConcurrentHashMap<>();
 
     private final ConcurrentHashMap<String, AtomicInteger> failedLoginAttempts =
             new ConcurrentHashMap<>();
@@ -31,9 +29,6 @@ public class ActivityAnalyticsService {
         }
 
         repository.save(new ActivityEventEntity(event.userId(), event.eventType()));
-
-        counts.computeIfAbsent(event.eventType(), key -> new LongAdder())
-                .increment();
 
         if ("LOGIN_FAILED".equals(event.eventType())
                 && event.userId() != null
@@ -55,11 +50,16 @@ public class ActivityAnalyticsService {
     }
 
     public Map<String, Long> getCounts() {
-        return counts.entrySet()
-                .stream()
+        List<Object[]> results = repository.findEventTypeCounts();
+        if (results == null || results.isEmpty()) {
+            return Collections.emptyMap();
+        }
+
+        return results.stream()
                 .collect(Collectors.toMap(
-                        Map.Entry::getKey,
-                        entry -> entry.getValue().sum()
+                        row -> (String) row[0],
+                        row -> ((Number) row[1]).longValue()
                 ));
     }
 }
+

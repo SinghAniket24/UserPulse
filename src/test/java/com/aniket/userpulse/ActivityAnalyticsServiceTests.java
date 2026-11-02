@@ -4,6 +4,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
+import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -14,6 +16,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
 class ActivityAnalyticsServiceTests {
 
@@ -28,16 +31,19 @@ class ActivityAnalyticsServiceTests {
 
     @Test
     void shouldCountRepeatedEvents() {
-        analyticsService.record(new UserActivityEvent("user-1", "LOGIN_SUCCESS"));
-        analyticsService.record(new UserActivityEvent("user-2", "LOGIN_SUCCESS"));
+        when(repository.findEventTypeCounts()).thenReturn(Collections.singletonList(
+                new Object[]{"LOGIN_SUCCESS", 2L}
+        ));
 
         assertEquals(2L, analyticsService.getCounts().get("LOGIN_SUCCESS"));
     }
 
     @Test
     void shouldTrackDifferentEventTypesSeparately() {
-        analyticsService.record(new UserActivityEvent("user-1", "LOGIN_SUCCESS"));
-        analyticsService.record(new UserActivityEvent("user-2", "USER_SIGNED_UP"));
+        when(repository.findEventTypeCounts()).thenReturn(List.of(
+                new Object[]{"LOGIN_SUCCESS", 1L},
+                new Object[]{"USER_SIGNED_UP", 1L}
+        ));
 
         assertEquals(
                 Map.of("LOGIN_SUCCESS", 1L, "USER_SIGNED_UP", 1L),
@@ -46,6 +52,8 @@ class ActivityAnalyticsServiceTests {
 
     @Test
     void shouldReturnEmptyCountsInitially() {
+        when(repository.findEventTypeCounts()).thenReturn(Collections.emptyList());
+
         assertTrue(analyticsService.getCounts().isEmpty());
     }
 
