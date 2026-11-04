@@ -7,6 +7,8 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
+import java.util.UUID;
+
 @Entity
 @Table(name = "activity_events")
 public class ActivityEventEntity {
@@ -14,6 +16,9 @@ public class ActivityEventEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    @Column(name = "event_id", nullable = false, unique = true)
+    private String eventId;
 
     @Column(name = "user_id", nullable = false)
     private String userId;
@@ -25,6 +30,11 @@ public class ActivityEventEntity {
     }
 
     public ActivityEventEntity(String userId, String eventType) {
+        this(UUID.randomUUID().toString(), userId, eventType);
+    }
+
+    public ActivityEventEntity(String eventId, String userId, String eventType) {
+        this.eventId = eventId;
         this.userId = userId;
         this.eventType = eventType;
     }
@@ -35,6 +45,14 @@ public class ActivityEventEntity {
 
     public void setId(Long id) {
         this.id = id;
+    }
+
+    public String getEventId() {
+        return eventId;
+    }
+
+    public void setEventId(String eventId) {
+        this.eventId = eventId;
     }
 
     public String getUserId() {

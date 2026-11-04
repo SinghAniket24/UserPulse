@@ -31,7 +31,7 @@ public class UserActivityConsumer {
                     event.userId());
         }
 
-        log.info("Received activity event: userId={}, eventType={}",
-                event.userId(), event.eventType());
+        log.info("Received activity event: eventId={}, userId={}, eventType={}",
+                event.eventId(), event.userId(), event.eventType());
     }
 }

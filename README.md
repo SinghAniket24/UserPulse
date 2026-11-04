@@ -1,11 +1,12 @@
 # UserPulse
 
-UserPulse is a Java and Spring Boot application that uses Apache Kafka for asynchronous user activity processing, PostgreSQL for event persistence, and REST APIs for activity analytics.
+UserPulse is a Java and Spring Boot application for asynchronous user activity processing and analytics. It uses Apache Kafka for event streaming, PostgreSQL for persistent storage, and REST APIs for submitting activities and retrieving analytics.
 
 ## Features
 
 - **Event Streaming:** Publishes validated activity events to Kafka using `userId` as the message key across three partitions.
-- **Activity Persistence & Analytics:** Stores activity events in PostgreSQL and calculates event counts using database aggregation.
+- **Event Idempotency:** Uses unique event IDs and atomic PostgreSQL inserts to prevent duplicate events from being persisted or counted.
+- **Activity Persistence & Analytics:** Stores activity events in PostgreSQL and calculates event counts through database aggregation.
 - **Failed Login Detection:** Detects three consecutive failed login attempts and resets the counter after a successful login.
 - **Error Handling:** Implements bounded retries with fixed backoff and routes malformed or unrecoverable messages to a dead-letter topic (`user-activity.DLT`).
 

@@ -3,6 +3,8 @@ package com.aniket.userpulse;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.UUID;
+
 @RestController
 @RequestMapping("/api/activities")
 public class UserActivityController {
@@ -21,7 +23,13 @@ public class UserActivityController {
                 || event.eventType() == null || event.eventType().isBlank()) {
             throw new IllegalArgumentException("Invalid activity request");
         }
-        producer.sendEvent(event);
+
+        String eventId = (event.eventId() == null || event.eventId().isBlank())
+                ? UUID.randomUUID().toString()
+                : event.eventId();
+
+        UserActivityEvent eventToSend = new UserActivityEvent(eventId, event.userId(), event.eventType());
+        producer.sendEvent(eventToSend);
         return "Activity accepted for processing";
     }
 

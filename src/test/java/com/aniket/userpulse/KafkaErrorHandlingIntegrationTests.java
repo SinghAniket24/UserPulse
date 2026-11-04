@@ -99,6 +99,9 @@ class KafkaErrorHandlingIntegrationTests {
     private ActivityAnalyticsService analyticsService;
 
     @Autowired
+    private ActivityEventRepository repository;
+
+    @Autowired
     private UserActivityProducer userActivityProducer;
 
     private Producer<String, String> rawStringProducer;
@@ -154,17 +157,82 @@ class KafkaErrorHandlingIntegrationTests {
     @Test
     void shouldConsumeValidEventAndUpdateAnalytics() {
         String userId = "user-valid-" + UUID.randomUUID();
-        UserActivityEvent event = new UserActivityEvent(userId, "LOGIN_SUCCESS");
+        String eventId = "evt-valid-" + UUID.randomUUID();
+        UserActivityEvent event = new UserActivityEvent(eventId, userId, "LOGIN_SUCCESS");
 
-        userActivityProducer.sendEvent(event);
+        try {
+            userActivityProducer.sendEvent(event);
 
-        await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
-            Map<String, Long> counts = analyticsService.getCounts();
-            assertThat(counts).containsKey("LOGIN_SUCCESS");
-            assertThat(counts.get("LOGIN_SUCCESS")).isGreaterThanOrEqualTo(1L);
-        });
+            await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
+                Map<String, Long> counts = analyticsService.getCounts();
+                assertThat(counts).containsKey("LOGIN_SUCCESS");
+                assertThat(counts.get("LOGIN_SUCCESS")).isGreaterThanOrEqualTo(1L);
+            });
 
-        assertThat(TestRetryConfig.deliveryAttemptsByKey.get(userId)).isNull();
+            assertThat(TestRetryConfig.deliveryAttemptsByKey.get(userId)).isNull();
+        } finally {
+            repository.findByEventId(eventId).ifPresent(repository::delete);
+        }
+    }
+
+    @Test
+    void shouldHandleDuplicateKafkaMessageWithoutRetriesOrDlt() {
+        String userId = "user-dup-" + UUID.randomUUID();
+        String eventId = "evt-dup-" + UUID.randomUUID();
+        String markerEventId = "evt-marker-" + UUID.randomUUID();
+        String eventType = "VIDEO_PLAYED";
+
+        long initialVideoCount = analyticsService.getCounts().getOrDefault(eventType, 0L);
+
+        UserActivityEvent event = new UserActivityEvent(eventId, userId, eventType);
+        UserActivityEvent duplicateEvent = new UserActivityEvent(eventId, userId, eventType);
+        UserActivityEvent markerEvent = new UserActivityEvent(markerEventId, userId, "USER_SIGNED_UP");
+
+        try {
+            // 1. Send first delivery
+            userActivityProducer.sendEvent(event);
+
+            // Wait until first delivery is consumed and persisted
+            await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
+                assertThat(repository.findByEventId(eventId)).isPresent();
+            });
+
+            // 2. Send duplicate delivery with the exact same eventId and userId
+            userActivityProducer.sendEvent(duplicateEvent);
+
+            // 3. Send marker event with same userId (same partition) to establish completion barrier
+            userActivityProducer.sendEvent(markerEvent);
+
+            // Wait until marker event is processed, guaranteeing duplicate has been fully consumed
+            await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
+                assertThat(repository.findByEventId(markerEventId)).isPresent();
+            });
+
+            // 4. Assert PostgreSQL contains exactly one record for that eventId
+            List<ActivityEventEntity> matchingRecords = repository.findAll().stream()
+                    .filter(e -> eventId.equals(e.getEventId()))
+                    .toList();
+            assertThat(matchingRecords).hasSize(1);
+            assertThat(matchingRecords.get(0).getUserId()).isEqualTo(userId);
+            assertThat(matchingRecords.get(0).getEventType()).isEqualTo(eventType);
+
+            // 5. Assert analytics counts increased only once
+            assertThat(analyticsService.getCounts().get(eventType)).isEqualTo(initialVideoCount + 1L);
+
+            // 6. Verify duplicate did not trigger any retry attempts
+            assertThat(TestRetryConfig.deliveryAttemptsByKey.get(userId)).isNull();
+
+            // 7. Explicitly verify no corresponding message reached user-activity.DLT
+            assertThat(TestRetryConfig.recoveredRecords)
+                    .noneMatch(record -> userId.equals(record.key()));
+            ConsumerRecords<String, byte[]> dltRecords = dltConsumer.poll(Duration.ofMillis(300));
+            for (ConsumerRecord<String, byte[]> dltRecord : dltRecords) {
+                assertThat(dltRecord.key()).isNotEqualTo(userId);
+            }
+        } finally {
+            repository.findByEventId(eventId).ifPresent(repository::delete);
+            repository.findByEventId(markerEventId).ifPresent(repository::delete);
+        }
     }
 
     @Test
