@@ -86,6 +86,7 @@ public class KafkaConfig {
 
         FixedBackOff backOff = new FixedBackOff(retryBackoffMs, retryMaxAttempts);
         DefaultErrorHandler errorHandler = new DefaultErrorHandler(deadLetterPublishingRecoverer, backOff);
+        errorHandler.addNotRetryableExceptions(InvalidActivityEventException.class);
         retryListeners.forEach(errorHandler::setRetryListeners);
         return errorHandler;
     }

@@ -4,6 +4,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -51,6 +53,42 @@ class UserActivityConsumerTests {
     @Test
     void shouldHandleNullEventGracefully() {
         assertDoesNotThrow(() -> consumer.consume(null));
+        verifyNoInteractions(analyticsService);
+    }
+
+    @Test
+    void shouldThrowInvalidActivityEventExceptionWhenEventIdIsNull() {
+        UserActivityEvent event = new UserActivityEvent(null, "user-1", "LOGIN_SUCCESS");
+
+        InvalidActivityEventException ex = assertThrows(
+                InvalidActivityEventException.class,
+                () -> consumer.consume(event)
+        );
+        assertEquals("Event eventId must not be null or blank", ex.getMessage());
+        verifyNoInteractions(analyticsService);
+    }
+
+    @Test
+    void shouldThrowInvalidActivityEventExceptionWhenEventIdIsEmpty() {
+        UserActivityEvent event = new UserActivityEvent("", "user-1", "LOGIN_SUCCESS");
+
+        InvalidActivityEventException ex = assertThrows(
+                InvalidActivityEventException.class,
+                () -> consumer.consume(event)
+        );
+        assertEquals("Event eventId must not be null or blank", ex.getMessage());
+        verifyNoInteractions(analyticsService);
+    }
+
+    @Test
+    void shouldThrowInvalidActivityEventExceptionWhenEventIdIsWhitespace() {
+        UserActivityEvent event = new UserActivityEvent("   ", "user-1", "LOGIN_SUCCESS");
+
+        InvalidActivityEventException ex = assertThrows(
+                InvalidActivityEventException.class,
+                () -> consumer.consume(event)
+        );
+        assertEquals("Event eventId must not be null or blank", ex.getMessage());
         verifyNoInteractions(analyticsService);
     }
 }

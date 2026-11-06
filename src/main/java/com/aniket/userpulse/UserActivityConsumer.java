@@ -24,6 +24,10 @@ public class UserActivityConsumer {
             return;
         }
 
+        if (event.eventId() == null || event.eventId().isBlank()) {
+            throw new InvalidActivityEventException("Event eventId must not be null or blank");
+        }
+
         boolean securityAlert = analyticsService.record(event);
 
         if (securityAlert) {

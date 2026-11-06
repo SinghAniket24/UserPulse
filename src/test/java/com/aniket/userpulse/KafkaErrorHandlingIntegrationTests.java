@@ -272,10 +272,11 @@ class KafkaErrorHandlingIntegrationTests {
         int partition = 2;
         String jsonPayload = """
                 {
+                    "eventId": "evt-%s",
                     "userId": "%s",
                     "eventType": "   "
                 }
-                """.formatted(key);
+                """.formatted(key, key);
 
         rawStringProducer.send(new ProducerRecord<>(TOPIC, partition, key, jsonPayload));
         rawStringProducer.flush();
@@ -287,6 +288,7 @@ class KafkaErrorHandlingIntegrationTests {
         assertThat(dltRecord.partition()).isEqualTo(partition);
 
         UserActivityEvent deserialized = objectMapper.readValue(dltRecord.value(), UserActivityEvent.class);
+        assertThat(deserialized.eventId()).isEqualTo("evt-" + key);
         assertThat(deserialized.userId()).isEqualTo(key);
         assertThat(deserialized.eventType()).isEqualTo("   ");
 
@@ -310,5 +312,129 @@ class KafkaErrorHandlingIntegrationTests {
         await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
             assertThat(TestRetryConfig.deliveryAttemptsByKey.get(key)).containsExactly(1, 2, 3);
         });
+    }
+
+    @Test
+    void shouldRouteMissingEventIdDirectlyToDltWithoutRetries() throws Exception {
+        String key = "missing-event-id-" + UUID.randomUUID();
+        int partition = 0;
+        String jsonPayload = """
+                {
+                    "userId": "%s",
+                    "eventType": "LOGIN_SUCCESS"
+                }
+                """.formatted(key);
+
+        rawStringProducer.send(new ProducerRecord<>(TOPIC, partition, key, jsonPayload));
+        rawStringProducer.flush();
+
+        ConsumerRecord<String, byte[]> dltRecord = pollForDltRecord(key, Duration.ofSeconds(10));
+
+        assertThat(dltRecord).isNotNull();
+        assertThat(dltRecord.key()).isEqualTo(key);
+        assertThat(dltRecord.partition()).isEqualTo(partition);
+
+        UserActivityEvent deserialized = objectMapper.readValue(dltRecord.value(), UserActivityEvent.class);
+        assertThat(deserialized.eventId()).isNull();
+        assertThat(deserialized.userId()).isEqualTo(key);
+        assertThat(deserialized.eventType()).isEqualTo("LOGIN_SUCCESS");
+
+        Header exceptionFqcn = dltRecord.headers().lastHeader(KafkaHeaders.DLT_EXCEPTION_FQCN);
+        assertThat(exceptionFqcn).isNotNull();
+        assertThat(new String(exceptionFqcn.value(), StandardCharsets.UTF_8))
+                .contains("ListenerExecutionFailedException");
+
+        Header exceptionCauseFqcn = dltRecord.headers().lastHeader(KafkaHeaders.DLT_EXCEPTION_CAUSE_FQCN);
+        assertThat(exceptionCauseFqcn).isNotNull();
+        assertThat(new String(exceptionCauseFqcn.value(), StandardCharsets.UTF_8))
+                .contains("InvalidActivityEventException");
+
+        Header exceptionMessage = dltRecord.headers().lastHeader(KafkaHeaders.DLT_EXCEPTION_MESSAGE);
+        assertThat(exceptionMessage).isNotNull();
+        assertThat(new String(exceptionMessage.value(), StandardCharsets.UTF_8))
+                .contains("Event eventId must not be null or blank");
+
+        // Invalid messages receive exactly one delivery attempt (no retries)
+        assertThat(TestRetryConfig.deliveryAttemptsByKey.get(key)).containsExactly(1);
+    }
+
+    @Test
+    void shouldRouteEmptyEventIdDirectlyToDltWithoutRetries() throws Exception {
+        String key = "empty-event-id-" + UUID.randomUUID();
+        int partition = 1;
+        String jsonPayload = """
+                {
+                    "eventId": "",
+                    "userId": "%s",
+                    "eventType": "LOGIN_SUCCESS"
+                }
+                """.formatted(key);
+
+        rawStringProducer.send(new ProducerRecord<>(TOPIC, partition, key, jsonPayload));
+        rawStringProducer.flush();
+
+        ConsumerRecord<String, byte[]> dltRecord = pollForDltRecord(key, Duration.ofSeconds(10));
+
+        assertThat(dltRecord).isNotNull();
+        assertThat(dltRecord.key()).isEqualTo(key);
+        assertThat(dltRecord.partition()).isEqualTo(partition);
+
+        UserActivityEvent deserialized = objectMapper.readValue(dltRecord.value(), UserActivityEvent.class);
+        assertThat(deserialized.eventId()).isEmpty();
+        assertThat(deserialized.userId()).isEqualTo(key);
+        assertThat(deserialized.eventType()).isEqualTo("LOGIN_SUCCESS");
+
+        Header exceptionCauseFqcn = dltRecord.headers().lastHeader(KafkaHeaders.DLT_EXCEPTION_CAUSE_FQCN);
+        assertThat(exceptionCauseFqcn).isNotNull();
+        assertThat(new String(exceptionCauseFqcn.value(), StandardCharsets.UTF_8))
+                .contains("InvalidActivityEventException");
+
+        Header exceptionMessage = dltRecord.headers().lastHeader(KafkaHeaders.DLT_EXCEPTION_MESSAGE);
+        assertThat(exceptionMessage).isNotNull();
+        assertThat(new String(exceptionMessage.value(), StandardCharsets.UTF_8))
+                .contains("Event eventId must not be null or blank");
+
+        // Invalid messages receive exactly one delivery attempt (no retries)
+        assertThat(TestRetryConfig.deliveryAttemptsByKey.get(key)).containsExactly(1);
+    }
+
+    @Test
+    void shouldRouteWhitespaceOnlyEventIdDirectlyToDltWithoutRetries() throws Exception {
+        String key = "whitespace-event-id-" + UUID.randomUUID();
+        int partition = 2;
+        String jsonPayload = """
+                {
+                    "eventId": "   ",
+                    "userId": "%s",
+                    "eventType": "LOGIN_SUCCESS"
+                }
+                """.formatted(key);
+
+        rawStringProducer.send(new ProducerRecord<>(TOPIC, partition, key, jsonPayload));
+        rawStringProducer.flush();
+
+        ConsumerRecord<String, byte[]> dltRecord = pollForDltRecord(key, Duration.ofSeconds(10));
+
+        assertThat(dltRecord).isNotNull();
+        assertThat(dltRecord.key()).isEqualTo(key);
+        assertThat(dltRecord.partition()).isEqualTo(partition);
+
+        UserActivityEvent deserialized = objectMapper.readValue(dltRecord.value(), UserActivityEvent.class);
+        assertThat(deserialized.eventId()).isEqualTo("   ");
+        assertThat(deserialized.userId()).isEqualTo(key);
+        assertThat(deserialized.eventType()).isEqualTo("LOGIN_SUCCESS");
+
+        Header exceptionCauseFqcn = dltRecord.headers().lastHeader(KafkaHeaders.DLT_EXCEPTION_CAUSE_FQCN);
+        assertThat(exceptionCauseFqcn).isNotNull();
+        assertThat(new String(exceptionCauseFqcn.value(), StandardCharsets.UTF_8))
+                .contains("InvalidActivityEventException");
+
+        Header exceptionMessage = dltRecord.headers().lastHeader(KafkaHeaders.DLT_EXCEPTION_MESSAGE);
+        assertThat(exceptionMessage).isNotNull();
+        assertThat(new String(exceptionMessage.value(), StandardCharsets.UTF_8))
+                .contains("Event eventId must not be null or blank");
+
+        // Invalid messages receive exactly one delivery attempt (no retries)
+        assertThat(TestRetryConfig.deliveryAttemptsByKey.get(key)).containsExactly(1);
     }
 }
