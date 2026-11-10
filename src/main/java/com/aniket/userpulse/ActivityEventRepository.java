@@ -24,4 +24,18 @@ public interface ActivityEventRepository extends JpaRepository<ActivityEventEnti
                           @Param("eventType") String eventType);
 
     Optional<ActivityEventEntity> findByEventId(String eventId);
+
+    @Query(value = "SELECT COUNT(*) " +
+                   "FROM activity_events " +
+                   "WHERE user_id = :userId " +
+                   "  AND event_type = 'LOGIN_FAILED' " +
+                   "  AND id > COALESCE( " +
+                   "      (SELECT MAX(id) " +
+                   "       FROM activity_events " +
+                   "       WHERE user_id = :userId " +
+                   "         AND event_type = 'LOGIN_SUCCESS'), " +
+                   "      0 " +
+                   "  )",
+           nativeQuery = true)
+    int countConsecutiveFailedLogins(@Param("userId") String userId);
 }

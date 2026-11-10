@@ -8,8 +8,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 @Service
@@ -21,9 +19,6 @@ public class ActivityAnalyticsService {
     private static final int FAILED_LOGIN_THRESHOLD = 3;
 
     private final ActivityEventRepository repository;
-
-    private final ConcurrentHashMap<String, AtomicInteger> failedLoginAttempts =
-            new ConcurrentHashMap<>();
 
     public ActivityAnalyticsService(ActivityEventRepository repository) {
         this.repository = repository;
@@ -46,16 +41,8 @@ public class ActivityAnalyticsService {
                 && event.userId() != null
                 && !event.userId().isBlank()) {
 
-            int attempts = failedLoginAttempts
-                    .computeIfAbsent(event.userId(), key -> new AtomicInteger())
-                    .incrementAndGet();
-
+            int attempts = repository.countConsecutiveFailedLogins(event.userId());
             return attempts == FAILED_LOGIN_THRESHOLD;
-        }
-
-        if ("LOGIN_SUCCESS".equals(event.eventType())
-                && event.userId() != null) {
-            failedLoginAttempts.remove(event.userId());
         }
 
         return false;

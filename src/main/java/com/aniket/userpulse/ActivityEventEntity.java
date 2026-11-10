@@ -5,12 +5,18 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 
 import java.util.UUID;
 
 @Entity
-@Table(name = "activity_events")
+@Table(
+        name = "activity_events",
+        indexes = {
+                @Index(name = "idx_activity_events_user_type_id", columnList = "user_id, event_type, id DESC")
+        }
+)
 public class ActivityEventEntity {
 
     @Id

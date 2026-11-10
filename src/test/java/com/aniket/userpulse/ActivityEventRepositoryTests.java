@@ -124,4 +124,116 @@ class ActivityEventRepositoryTests {
         // Verify count is exactly baseline + 1
         assertEquals(baselineCount + 1, repository.count());
     }
+
+    private void recordEvent(String userId, String eventType) {
+        String eventId = "test-" + UUID.randomUUID();
+        testEventIds.add(eventId);
+        repository.insertIfNotExists(eventId, userId, eventType);
+    }
+
+    private void recordEventWithId(String eventId, String userId, String eventType) {
+        testEventIds.add(eventId);
+        repository.insertIfNotExists(eventId, userId, eventType);
+    }
+
+    @Test
+    void shouldReturnZeroWhenNoEventsExistForUser() {
+        String userId = "user-empty-" + UUID.randomUUID();
+
+        int count = repository.countConsecutiveFailedLogins(userId);
+
+        assertEquals(0, count);
+    }
+
+    @Test
+    void shouldReturnOneForSingleFailedLogin() {
+        String userId = "user-single-fail-" + UUID.randomUUID();
+        recordEvent(userId, "LOGIN_FAILED");
+
+        int count = repository.countConsecutiveFailedLogins(userId);
+
+        assertEquals(1, count);
+    }
+
+    @Test
+    void shouldCountThreeConsecutiveFailedLogins() {
+        String userId = "user-three-fail-" + UUID.randomUUID();
+        recordEvent(userId, "LOGIN_FAILED");
+        recordEvent(userId, "LOGIN_FAILED");
+        recordEvent(userId, "LOGIN_FAILED");
+
+        int count = repository.countConsecutiveFailedLogins(userId);
+
+        assertEquals(3, count);
+    }
+
+    @Test
+    void shouldResetCountToZeroAfterSuccessfulLogin() {
+        String userId = "user-reset-" + UUID.randomUUID();
+        recordEvent(userId, "LOGIN_FAILED");
+        recordEvent(userId, "LOGIN_FAILED");
+        assertEquals(2, repository.countConsecutiveFailedLogins(userId));
+
+        recordEvent(userId, "LOGIN_SUCCESS");
+
+        int count = repository.countConsecutiveFailedLogins(userId);
+        assertEquals(0, count);
+    }
+
+    @Test
+    void shouldIgnoreFailuresPriorToLatestSuccessfulLogin() {
+        String userId = "user-prior-failures-" + UUID.randomUUID();
+        recordEvent(userId, "LOGIN_FAILED");
+        recordEvent(userId, "LOGIN_FAILED");
+        recordEvent(userId, "LOGIN_SUCCESS");
+        recordEvent(userId, "LOGIN_FAILED");
+
+        int count = repository.countConsecutiveFailedLogins(userId);
+
+        assertEquals(1, count);
+    }
+
+    @Test
+    void shouldNotResetStreakOnNonLoginEvents() {
+        String userId = "user-non-login-" + UUID.randomUUID();
+        recordEvent(userId, "LOGIN_FAILED");
+        recordEvent(userId, "VIDEO_PLAYED");
+        recordEvent(userId, "USER_SIGNED_UP");
+        recordEvent(userId, "LOGIN_FAILED");
+
+        int count = repository.countConsecutiveFailedLogins(userId);
+
+        assertEquals(2, count);
+    }
+
+    @Test
+    void shouldMaintainIndependentCountsForDifferentUsers() {
+        String userA = "user-a-" + UUID.randomUUID();
+        String userB = "user-b-" + UUID.randomUUID();
+
+        recordEvent(userA, "LOGIN_FAILED");
+        recordEvent(userB, "LOGIN_FAILED");
+        recordEvent(userA, "LOGIN_FAILED");
+        recordEvent(userB, "LOGIN_SUCCESS");
+        recordEvent(userA, "LOGIN_FAILED");
+
+        assertEquals(3, repository.countConsecutiveFailedLogins(userA));
+        assertEquals(0, repository.countConsecutiveFailedLogins(userB));
+    }
+
+    @Test
+    void shouldNotIncreaseCountForDuplicateEventId() {
+        String userId = "user-dup-" + UUID.randomUUID();
+        String duplicateEventId = "evt-dup-" + UUID.randomUUID();
+
+        recordEventWithId(duplicateEventId, userId, "LOGIN_FAILED");
+        assertEquals(1, repository.countConsecutiveFailedLogins(userId));
+
+        // Re-attempting insert with identical eventId must be ignored
+        int rowsAffected = repository.insertIfNotExists(duplicateEventId, userId, "LOGIN_FAILED");
+        assertEquals(0, rowsAffected);
+
+        int count = repository.countConsecutiveFailedLogins(userId);
+        assertEquals(1, count);
+    }
 }

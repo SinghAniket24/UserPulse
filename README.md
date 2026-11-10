@@ -7,7 +7,7 @@ UserPulse is a Java and Spring Boot application for asynchronous user activity p
 - **Event Streaming:** Publishes activity events to Kafka using `userId` as the message key across three partitions, preserving per-user event ordering.
 - **Event Idempotency:** Uses unique event IDs and atomic PostgreSQL inserts to prevent duplicate events from being stored or counted.
 - **Activity Persistence & Analytics:** Stores activity events in PostgreSQL and calculates event counts using database aggregation.
-- **Failed Login Detection:** Tracks consecutive failed login attempts in memory, logs an alert after three failures, and resets the counter after a successful login.
+- **Failed Login Detection:** Derives consecutive failed-login attempts from persisted PostgreSQL activity events, triggers a security alert after three consecutive failed logins, and resets the streak after a successful login.
 - **Error Handling:** Retries processing failures and routes unrecoverable messages to a dead-letter topic (`user-activity.DLT`). Invalid event IDs are sent directly to the DLT without retries.
 
 ## Tech Stack

@@ -32,13 +32,150 @@ class ActivityAnalyticsServiceTests {
 
     @Test
     void shouldPersistNewEventSuccessfully() {
-        UserActivityEvent event = new UserActivityEvent("evt-1", "user-1", "LOGIN_SUCCESS");
-        when(repository.insertIfNotExists("evt-1", "user-1", "LOGIN_SUCCESS")).thenReturn(1);
+        UserActivityEvent event = new UserActivityEvent("evt-1", "user-persist", "LOGIN_SUCCESS");
+        when(repository.insertIfNotExists("evt-1", "user-persist", "LOGIN_SUCCESS")).thenReturn(1);
 
         boolean alert = analyticsService.record(event);
 
         assertFalse(alert);
-        verify(repository, times(1)).insertIfNotExists("evt-1", "user-1", "LOGIN_SUCCESS");
+        verify(repository, times(1)).insertIfNotExists("evt-1", "user-persist", "LOGIN_SUCCESS");
+    }
+
+    @Test
+    void shouldNotTriggerAlertOnFirstAndSecondFailedLogins() {
+        when(repository.countConsecutiveFailedLogins("user-1"))
+                .thenReturn(1)
+                .thenReturn(2);
+
+        UserActivityEvent fail1 = new UserActivityEvent("evt-1", "user-1", "LOGIN_FAILED");
+        UserActivityEvent fail2 = new UserActivityEvent("evt-2", "user-1", "LOGIN_FAILED");
+
+        assertFalse(analyticsService.record(fail1));
+        assertFalse(analyticsService.record(fail2));
+    }
+
+    @Test
+    void shouldTriggerExactlyOneAlertOnThirdConsecutiveFailedLogin() {
+        when(repository.countConsecutiveFailedLogins("user-1"))
+                .thenReturn(1)
+                .thenReturn(2)
+                .thenReturn(3);
+
+        UserActivityEvent fail1 = new UserActivityEvent("evt-1", "user-1", "LOGIN_FAILED");
+        UserActivityEvent fail2 = new UserActivityEvent("evt-2", "user-1", "LOGIN_FAILED");
+        UserActivityEvent fail3 = new UserActivityEvent("evt-3", "user-1", "LOGIN_FAILED");
+
+        assertFalse(analyticsService.record(fail1));
+        assertFalse(analyticsService.record(fail2));
+        assertTrue(analyticsService.record(fail3));
+    }
+
+    @Test
+    void shouldNotTriggerAlertOnFourthFailedLoginInSameStreak() {
+        when(repository.countConsecutiveFailedLogins("user-1"))
+                .thenReturn(1)
+                .thenReturn(2)
+                .thenReturn(3)
+                .thenReturn(4);
+
+        UserActivityEvent fail1 = new UserActivityEvent("evt-1", "user-1", "LOGIN_FAILED");
+        UserActivityEvent fail2 = new UserActivityEvent("evt-2", "user-1", "LOGIN_FAILED");
+        UserActivityEvent fail3 = new UserActivityEvent("evt-3", "user-1", "LOGIN_FAILED");
+        UserActivityEvent fail4 = new UserActivityEvent("evt-4", "user-1", "LOGIN_FAILED");
+
+        assertFalse(analyticsService.record(fail1));
+        assertFalse(analyticsService.record(fail2));
+        assertTrue(analyticsService.record(fail3));
+        assertFalse(analyticsService.record(fail4));
+    }
+
+    @Test
+    void shouldResetStreakOnSuccessfulLogin() {
+        when(repository.countConsecutiveFailedLogins("user-1"))
+                .thenReturn(1)
+                .thenReturn(2);
+
+        UserActivityEvent fail1 = new UserActivityEvent("evt-1", "user-1", "LOGIN_FAILED");
+        UserActivityEvent fail2 = new UserActivityEvent("evt-2", "user-1", "LOGIN_FAILED");
+        UserActivityEvent success = new UserActivityEvent("evt-3", "user-1", "LOGIN_SUCCESS");
+
+        assertFalse(analyticsService.record(fail1));
+        assertFalse(analyticsService.record(fail2));
+        assertFalse(analyticsService.record(success));
+
+        verify(repository, times(2)).countConsecutiveFailedLogins("user-1");
+    }
+
+    @Test
+    void shouldTriggerNewAlertOnThreeFailuresAfterSuccessfulLogin() {
+        when(repository.countConsecutiveFailedLogins("user-1"))
+                .thenReturn(1)
+                .thenReturn(2)
+                .thenReturn(1)
+                .thenReturn(2)
+                .thenReturn(3);
+
+        UserActivityEvent fail1 = new UserActivityEvent("evt-1", "user-1", "LOGIN_FAILED");
+        UserActivityEvent fail2 = new UserActivityEvent("evt-2", "user-1", "LOGIN_FAILED");
+        UserActivityEvent success = new UserActivityEvent("evt-3", "user-1", "LOGIN_SUCCESS");
+        UserActivityEvent fail3 = new UserActivityEvent("evt-4", "user-1", "LOGIN_FAILED");
+        UserActivityEvent fail4 = new UserActivityEvent("evt-5", "user-1", "LOGIN_FAILED");
+        UserActivityEvent fail5 = new UserActivityEvent("evt-6", "user-1", "LOGIN_FAILED");
+
+        assertFalse(analyticsService.record(fail1));
+        assertFalse(analyticsService.record(fail2));
+        assertFalse(analyticsService.record(success));
+
+        assertFalse(analyticsService.record(fail3));
+        assertFalse(analyticsService.record(fail4));
+        assertTrue(analyticsService.record(fail5));
+    }
+
+    @Test
+    void duplicateLoginFailedEventsShouldNotIncreaseCountOrTriggerAlert() {
+        UserActivityEvent failEvent = new UserActivityEvent("evt-dup", "user-1", "LOGIN_FAILED");
+
+        when(repository.insertIfNotExists("evt-dup", "user-1", "LOGIN_FAILED"))
+                .thenReturn(1)   // first delivery -> new
+                .thenReturn(0)   // second delivery -> duplicate
+                .thenReturn(0);  // third delivery -> duplicate
+
+        when(repository.countConsecutiveFailedLogins("user-1")).thenReturn(1);
+
+        assertFalse(analyticsService.record(failEvent));
+        assertFalse(analyticsService.record(failEvent));
+        assertFalse(analyticsService.record(failEvent));
+
+        verify(repository, times(3)).insertIfNotExists("evt-dup", "user-1", "LOGIN_FAILED");
+        verify(repository, times(1)).countConsecutiveFailedLogins("user-1");
+    }
+
+    @Test
+    void duplicateEventsCannotTriggerFalseSecurityAlert() {
+        UserActivityEvent fail1 = new UserActivityEvent("evt-fail-1", "user-1", "LOGIN_FAILED");
+        UserActivityEvent fail2 = new UserActivityEvent("evt-fail-2", "user-1", "LOGIN_FAILED");
+
+        when(repository.insertIfNotExists("evt-fail-1", "user-1", "LOGIN_FAILED"))
+                .thenReturn(1)   // first time -> new
+                .thenReturn(0);  // duplicate redelivery -> ignored
+
+        when(repository.insertIfNotExists("evt-fail-2", "user-1", "LOGIN_FAILED"))
+                .thenReturn(1);  // first time -> new
+
+        when(repository.countConsecutiveFailedLogins("user-1"))
+                .thenReturn(1)
+                .thenReturn(2);
+
+        // 1st failed attempt
+        assertFalse(analyticsService.record(fail1));
+        // Duplicate delivery of 1st failed attempt -> ignored, counter stays at 1
+        assertFalse(analyticsService.record(fail1));
+        // 2nd failed attempt (distinct event) -> counter becomes 2
+        assertFalse(analyticsService.record(fail2));
+        // Another duplicate delivery of 1st failed attempt -> ignored, counter stays at 2
+        assertFalse(analyticsService.record(fail1));
+
+        verify(repository, times(2)).countConsecutiveFailedLogins("user-1");
     }
 
     @Test
@@ -76,75 +213,76 @@ class ActivityAnalyticsServiceTests {
     }
 
     @Test
-    void duplicateLoginFailedEventsShouldNotIncrementFailedLoginCounter() {
-        UserActivityEvent failEvent = new UserActivityEvent("evt-dup", "user-1", "LOGIN_FAILED");
+    void nonLoginEventsShouldNotResetStreak() {
+        when(repository.countConsecutiveFailedLogins("user-1"))
+                .thenReturn(1)
+                .thenReturn(2)
+                .thenReturn(3);
 
-        when(repository.insertIfNotExists("evt-dup", "user-1", "LOGIN_FAILED"))
-                .thenReturn(1)   // first delivery -> new
-                .thenReturn(0)   // second delivery -> duplicate
-                .thenReturn(0);  // third delivery -> duplicate
-
-        assertFalse(analyticsService.record(failEvent));
-        assertFalse(analyticsService.record(failEvent));
-        assertFalse(analyticsService.record(failEvent));
-
-        verify(repository, times(3)).insertIfNotExists("evt-dup", "user-1", "LOGIN_FAILED");
-    }
-
-    @Test
-    void duplicateEventsCannotTriggerFalseSecurityAlert() {
-        UserActivityEvent fail1 = new UserActivityEvent("evt-fail-1", "user-1", "LOGIN_FAILED");
-        UserActivityEvent fail2 = new UserActivityEvent("evt-fail-2", "user-1", "LOGIN_FAILED");
-
-        when(repository.insertIfNotExists("evt-fail-1", "user-1", "LOGIN_FAILED"))
-                .thenReturn(1)   // first time -> new
-                .thenReturn(0);  // duplicate redelivery -> ignored
-
-        when(repository.insertIfNotExists("evt-fail-2", "user-1", "LOGIN_FAILED"))
-                .thenReturn(1);  // first time -> new
-
-        // 1st failed attempt
-        assertFalse(analyticsService.record(fail1));
-        // Duplicate delivery of 1st failed attempt -> ignored, counter stays at 1
-        assertFalse(analyticsService.record(fail1));
-        // 2nd failed attempt (distinct event) -> counter becomes 2
-        assertFalse(analyticsService.record(fail2));
-        // Another duplicate delivery of 1st failed attempt -> ignored, counter stays at 2
-        assertFalse(analyticsService.record(fail1));
-
-        // Threshold is 3; duplicates were ignored so counter never reached 3
-    }
-
-    @Test
-    void threeDistinctConsecutiveFailedLoginsShouldTriggerAlert() {
         UserActivityEvent fail1 = new UserActivityEvent("evt-1", "user-1", "LOGIN_FAILED");
         UserActivityEvent fail2 = new UserActivityEvent("evt-2", "user-1", "LOGIN_FAILED");
-        UserActivityEvent fail3 = new UserActivityEvent("evt-3", "user-1", "LOGIN_FAILED");
-        UserActivityEvent fail4 = new UserActivityEvent("evt-4", "user-1", "LOGIN_FAILED");
+        UserActivityEvent videoEvent = new UserActivityEvent("evt-3", "user-1", "VIDEO_PLAYED");
+        UserActivityEvent signupEvent = new UserActivityEvent("evt-4", "user-1", "USER_SIGNED_UP");
+        UserActivityEvent fail3 = new UserActivityEvent("evt-5", "user-1", "LOGIN_FAILED");
 
         assertFalse(analyticsService.record(fail1));
         assertFalse(analyticsService.record(fail2));
+        assertFalse(analyticsService.record(videoEvent));
+        assertFalse(analyticsService.record(signupEvent));
         assertTrue(analyticsService.record(fail3));
-        assertFalse(analyticsService.record(fail4));
+
+        verify(repository, times(3)).countConsecutiveFailedLogins("user-1");
     }
 
     @Test
-    void shouldResetFailedAttemptsAfterSuccessfulLogin() {
-        UserActivityEvent fail1 = new UserActivityEvent("evt-fail-1", "user-1", "LOGIN_FAILED");
-        UserActivityEvent fail2 = new UserActivityEvent("evt-fail-2", "user-1", "LOGIN_FAILED");
-        UserActivityEvent success = new UserActivityEvent("evt-success", "user-1", "LOGIN_SUCCESS");
-        UserActivityEvent fail3 = new UserActivityEvent("evt-fail-3", "user-1", "LOGIN_FAILED");
-        UserActivityEvent fail4 = new UserActivityEvent("evt-fail-4", "user-1", "LOGIN_FAILED");
-        UserActivityEvent fail5 = new UserActivityEvent("evt-fail-5", "user-1", "LOGIN_FAILED");
+    void shouldMaintainIndependentStreaksForDifferentUsers() {
+        when(repository.countConsecutiveFailedLogins("user-1"))
+                .thenReturn(1)
+                .thenReturn(2)
+                .thenReturn(3);
 
-        analyticsService.record(fail1);
-        analyticsService.record(fail2);
+        when(repository.countConsecutiveFailedLogins("user-2"))
+                .thenReturn(1)
+                .thenReturn(2);
 
-        analyticsService.record(success);
+        assertFalse(analyticsService.record(new UserActivityEvent("evt-u1-1", "user-1", "LOGIN_FAILED")));
+        assertFalse(analyticsService.record(new UserActivityEvent("evt-u1-2", "user-1", "LOGIN_FAILED")));
 
-        assertFalse(analyticsService.record(fail3));
-        assertFalse(analyticsService.record(fail4));
-        assertTrue(analyticsService.record(fail5));
+        assertFalse(analyticsService.record(new UserActivityEvent("evt-u2-1", "user-2", "LOGIN_FAILED")));
+        assertFalse(analyticsService.record(new UserActivityEvent("evt-u2-2", "user-2", "LOGIN_FAILED")));
+
+        assertTrue(analyticsService.record(new UserActivityEvent("evt-u1-3", "user-1", "LOGIN_FAILED"))); // 3rd fail for user 1
+        assertFalse(analyticsService.record(new UserActivityEvent("evt-u2-3", "user-2", "LOGIN_SUCCESS"))); // user 2 success
+    }
+
+    @Test
+    void shouldThrowExceptionWhenEventIsNull() {
+        assertThrows(IllegalArgumentException.class, () -> analyticsService.record(null));
+        verifyNoInteractions(repository);
+    }
+
+    @Test
+    void shouldThrowExceptionWhenEventTypeIsNull() {
+        assertThrows(IllegalArgumentException.class, () -> analyticsService.record(new UserActivityEvent("evt-1", "user-1", null)));
+        verifyNoInteractions(repository);
+    }
+
+    @Test
+    void shouldThrowExceptionWhenEventTypeIsBlank() {
+        assertThrows(IllegalArgumentException.class, () -> analyticsService.record(new UserActivityEvent("evt-1", "user-1", "   ")));
+        verifyNoInteractions(repository);
+    }
+
+    @Test
+    void shouldTrackDifferentEventTypesInCounts() {
+        when(repository.findEventTypeCounts()).thenReturn(List.of(
+                new Object[]{"LOGIN_SUCCESS", 1L},
+                new Object[]{"USER_SIGNED_UP", 1L}
+        ));
+
+        assertEquals(
+                Map.of("LOGIN_SUCCESS", 1L, "USER_SIGNED_UP", 1L),
+                analyticsService.getCounts());
     }
 
     @Test
@@ -177,49 +315,9 @@ class ActivityAnalyticsServiceTests {
     }
 
     @Test
-    void shouldTrackDifferentEventTypesSeparately() {
-        when(repository.findEventTypeCounts()).thenReturn(List.of(
-                new Object[]{"LOGIN_SUCCESS", 1L},
-                new Object[]{"USER_SIGNED_UP", 1L}
-        ));
-
-        assertEquals(
-                Map.of("LOGIN_SUCCESS", 1L, "USER_SIGNED_UP", 1L),
-                analyticsService.getCounts());
-    }
-
-    @Test
     void shouldReturnEmptyCountsInitially() {
         when(repository.findEventTypeCounts()).thenReturn(Collections.emptyList());
 
         assertTrue(analyticsService.getCounts().isEmpty());
-    }
-
-    @Test
-    void shouldTrackFailedLoginAttemptsSeparatelyForEachUser() {
-        analyticsService.record(new UserActivityEvent("evt-u1-1", "user-1", "LOGIN_FAILED"));
-        analyticsService.record(new UserActivityEvent("evt-u1-2", "user-1", "LOGIN_FAILED"));
-
-        assertFalse(analyticsService.record(new UserActivityEvent("evt-u2-1", "user-2", "LOGIN_FAILED")));
-
-        assertTrue(analyticsService.record(new UserActivityEvent("evt-u1-3", "user-1", "LOGIN_FAILED")));
-    }
-
-    @Test
-    void shouldThrowExceptionWhenEventIsNull() {
-        assertThrows(IllegalArgumentException.class, () -> analyticsService.record(null));
-        verifyNoInteractions(repository);
-    }
-
-    @Test
-    void shouldThrowExceptionWhenEventTypeIsNull() {
-        assertThrows(IllegalArgumentException.class, () -> analyticsService.record(new UserActivityEvent("evt-1", "user-1", null)));
-        verifyNoInteractions(repository);
-    }
-
-    @Test
-    void shouldThrowExceptionWhenEventTypeIsBlank() {
-        assertThrows(IllegalArgumentException.class, () -> analyticsService.record(new UserActivityEvent("evt-1", "user-1", "   ")));
-        verifyNoInteractions(repository);
     }
 }
