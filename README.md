@@ -1,24 +1,24 @@
 # UserPulse
 
-UserPulse is a Java and Spring Boot application for asynchronous user activity processing and analytics. It uses Apache Kafka for event streaming, PostgreSQL for persistent storage, and REST APIs for submitting activities and retrieving analytics.
+UserPulse is a Java and Spring Boot application for asynchronous user activity processing and analytics. It uses Apache Kafka for event streaming and PostgreSQL to store activity events and generate analytics.
 
 ## Features
 
-- **Event Streaming:** Publishes activity events to Kafka using `userId` as the message key across three partitions, preserving per-user event ordering.
-- **Event Idempotency:** Uses unique event IDs and atomic PostgreSQL inserts to prevent duplicate events from being stored or counted.
-- **Activity Persistence & Analytics:** Stores activity events in PostgreSQL and calculates event counts using database aggregation.
-- **Failed Login Detection:** Derives consecutive failed-login attempts from persisted PostgreSQL activity events, triggers a security alert after three consecutive failed logins, and resets the streak after a successful login.
-- **Error Handling:** Retries processing failures and routes unrecoverable messages to a dead-letter topic (`user-activity.DLT`). Invalid event IDs are sent directly to the DLT without retries.
+- **Event Streaming:** Publishes activity events to Kafka using `userId` as the message key across three partitions, routing events for the same user to the same partition, where Kafka preserves their order.
+- **Idempotent Processing:** Uses unique event IDs and atomic PostgreSQL inserts to prevent duplicate events from being stored or counted.
+- **Activity Analytics:** Persists activity events in PostgreSQL and calculates event counts using database aggregation.
+- **Failed Login Detection:** Tracks consecutive failed login attempts from persisted events, triggers an alert after three failures, and resets the streak after a successful login.
+- **Error Handling:** Retries processing failures and routes unrecoverable messages to a dead-letter topic (`user-activity.DLT`). Invalid event IDs and deserialization failures are sent directly to the DLT.
 
 ## Tech Stack
 
-Java · Spring Boot · Apache Kafka · PostgreSQL · Docker Compose
+Java 17 · Spring Boot · Apache Kafka · PostgreSQL · Docker Compose
 
 ## Quick Start
 
 **Prerequisites:** Java 17 and Docker.
 
-Configure your environment:
+Configure environment variables:
 
 ```powershell
 Copy-Item .env.example .env
@@ -26,7 +26,7 @@ Copy-Item .env.example .env
 
 Start Kafka and PostgreSQL:
 
-```powershell
+```bash
 docker compose up -d
 ```
 
@@ -46,7 +46,7 @@ The API is available at `http://localhost:8080`.
 | `GET` | `/api/analytics` | Retrieve aggregated event counts |
 | `GET` | `/actuator/health` | Check application health |
 
-### Example Request
+**Example Request**
 
 `POST /api/activities`
 
@@ -61,11 +61,11 @@ An optional `eventId` can be supplied for idempotency. If omitted, the applicati
 
 ## Kafka & Error Handling
 
-- Main topic: `user-activity` (3 partitions).
-- Consumer group: `userpulse-consumer`.
-- Dead-letter topic: `user-activity.DLT`.
-- Retry policy: 2 retries with a 1-second backoff.
-- Events with missing or blank event IDs, along with deserialization failures, are routed directly to the DLT without retries.
+- **Topic:** `user-activity` (3 partitions)
+- **Consumer Group:** `userpulse-consumer`
+- **Dead-letter Topic:** `user-activity.DLT`
+- **Retry Policy:** 2 retries with a 1-second backoff.
+- **Direct DLT Routing:** Invalid event IDs and deserialization failures bypass retries.
 
 ## Tests
 
