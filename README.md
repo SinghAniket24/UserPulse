@@ -12,7 +12,7 @@ UserPulse is a Java and Spring Boot application for asynchronous user activity p
 
 ## Tech Stack
 
-Java 17 · Spring Boot · Apache Kafka · PostgreSQL · Docker Compose
+Java 17 · Spring Boot · Apache Kafka · PostgreSQL · Docker
 
 ## Quick Start
 
@@ -24,27 +24,39 @@ Configure environment variables:
 Copy-Item .env.example .env
 ```
 
+### Docker Deployment
+
+Build and start the application along with Kafka and PostgreSQL:
+
+```bash
+docker compose up -d --build
+```
+
+The API is available at `http://localhost:8080`.
+
+### Local Development
+
 Start Kafka and PostgreSQL:
 
 ```bash
-docker compose up -d
+docker compose up -d kafka postgres
 ```
 
-Run the application:
+Run the Spring Boot application locally:
 
 ```powershell
 .\mvnw.cmd spring-boot:run
 ```
 
-The API is available at `http://localhost:8080`.
+The Kafka configuration supports separate listeners for container communication and connections from the host machine.
 
 ## API Endpoints
 
-| Method | Endpoint | Description |
-|---|---|---|
-| `POST` | `/api/activities` | Submit a user activity event |
-| `GET` | `/api/analytics` | Retrieve aggregated event counts |
-| `GET` | `/actuator/health` | Check application health |
+| **Method** | **Endpoint**       | **Description**                  |
+| ---------- | ------------------ | -------------------------------- |
+| `POST`     | `/api/activities`  | Submit a user activity event     |
+| `GET`      | `/api/analytics`   | Retrieve aggregated event counts |
+| `GET`      | `/actuator/health` | Check application health         |
 
 **Example Request**
 
